@@ -40,14 +40,72 @@ export async function GET(request: Request) {
     console.log('=== CLIENT FETCH - Fresh Query ===', new Date().toISOString())
     
     // Then fetch ALL with explicit limit - force fresh query
-    const result = await supabase
-      .from('clients')
-      .select('*')
-      .limit(1000) // Explicit high limit to ensure we get everything
+    // Try to join with agencies table, but fallback to basic select if join fails
+    // Use LEFT JOIN (outer join) to include clients even if they don't have an agency_id
+    let result
+    try {
+      result = await supabase
+        .from('clients')
+        .select(`
+          *,
+          agencies!left(*)
+        `)
+        .limit(1000) // Explicit high limit to ensure we get everything
+      
+      // If join fails (agencies table might not exist), fallback to basic select
+      if (result.error) {
+        const errorMsg = result.error.message || ''
+        const errorCode = result.error.code || ''
+        
+        // Check if error is related to agencies table not existing
+        if (errorCode === 'PGRST116' || 
+            errorMsg.includes('agencies') || 
+            errorMsg.includes('relation') ||
+            errorMsg.includes('does not exist')) {
+          console.warn('Agencies table not found or join failed, falling back to basic select:', errorMsg)
+          const fallbackResult = await supabase
+            .from('clients')
+            .select('*')
+            .limit(1000)
+          
+          if (fallbackResult.error) {
+            // If fallback also fails, use the original error
+            error = result.error
+            clients = []
+          } else {
+            // Fallback succeeded
+            result = fallbackResult
+            clients = result.data || []
+            error = null
+          }
+        } else {
+          // Different error, use it
+          clients = result.data || []
+          error = result.error
+        }
+      } else {
+        // Join succeeded
+        clients = result.data || []
+        error = null
+      }
+    } catch (err) {
+      console.warn('Exception with join query, falling back to basic select:', err)
+      try {
+        result = await supabase
+          .from('clients')
+          .select('*')
+          .limit(1000)
+        
+        clients = result.data || []
+        error = result.error
+      } catch (fallbackErr) {
+        console.error('Both queries failed:', fallbackErr)
+        error = fallbackErr instanceof Error ? fallbackErr : new Error('Failed to fetch clients')
+        clients = []
+      }
+    }
     
-    clients = result.data || []
     count = totalCount
-    error = result.error
     
     console.log(`Query returned ${clients.length} records (expected ${count})`)
 
@@ -116,9 +174,43 @@ export async function GET(request: Request) {
       }
     }
     
+    // Log before transformation to see all clients
+    console.log('Clients before transformation:', clientsArray.length)
+    console.log('Client IDs before transformation:', clientsArray.map((c: any) => c.id))
+    
+    // Transform clients to map agencies relationship to agency property
+    // Supabase returns it as 'agencies' (table name) but our interface expects 'agency'
+    // Handle both cases: when join succeeds (agencies array) and when it doesn't (no agencies property)
+    const transformedClients = clientsArray.map((client: any) => {
+      // Remove the agencies property if it exists (we'll use agency instead)
+      const { agencies, ...rest } = client
+      
+      // If agencies was returned from the join, use the first one
+      if (agencies && Array.isArray(agencies) && agencies.length > 0) {
+        return {
+          ...rest,
+          agency: agencies[0] // Take first agency (should only be one)
+        }
+      }
+      
+      // If agencies is a single object (Supabase sometimes returns it this way)
+      if (agencies && typeof agencies === 'object' && !Array.isArray(agencies)) {
+        return {
+          ...rest,
+          agency: agencies
+        }
+      }
+      
+      // No agency data, return client as-is (this is fine - client just doesn't have an agency)
+      return rest
+    })
+    
+    console.log('Clients after transformation:', transformedClients.length)
+    console.log('Client IDs after transformation:', transformedClients.map((c: any) => c.id))
+
     // DO NOT remove duplicates - return ALL records exactly as Supabase returns them
     // Just sort them, but keep every single record
-    const sortedClients = clientsArray.sort((a: any, b: any) => {
+    const sortedClients = transformedClients.sort((a: any, b: any) => {
       const aDate = a.created_at ? new Date(a.created_at).getTime() : 0
       const bDate = b.created_at ? new Date(b.created_at).getTime() : 0
       return bDate - aDate // Descending order (newest first)

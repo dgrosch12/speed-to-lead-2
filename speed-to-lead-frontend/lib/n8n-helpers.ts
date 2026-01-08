@@ -109,11 +109,18 @@ export function customizeWorkflow(
     clientId: string
   }
 ): any {
+  console.log(`🎯 Customizing workflow for client:`, {
+    businessName: clientData.businessName,
+    clientId: clientData.clientId,
+    ownerName: clientData.ownerName
+  })
+
   // Deep clone the template to avoid reference issues
   const customized = JSON.parse(JSON.stringify(template))
 
   // Update workflow name
   customized.name = `${clientData.businessName} - STL`
+  console.log(`📝 Workflow name set to: ${customized.name}`)
 
   const nodes = customized.nodes || []
 
@@ -185,21 +192,48 @@ export function customizeWorkflow(
     }
   }
 
-  // 5. Update "HTTP Request" node in IVR Endpoint flow
-  const ivrHttpRequestNode = nodes.find(
-    (n: any) => n?.type === 'n8n-nodes-base.httpRequest' &&
-    (String(n?.name || '').toLowerCase().includes('ivr') ||
-     String(n?.name || '').toLowerCase().includes('endpoint'))
+  // 5. Update ALL HTTP Request nodes that have client_id parameters
+  console.log(`🔍 Searching for HTTP Request nodes with client_id parameters...`)
+  
+  const httpRequestNodes = nodes.filter(
+    (n: any) => n?.type === 'n8n-nodes-base.httpRequest'
   )
-  if (ivrHttpRequestNode?.parameters?.queryParameters?.parameters) {
-    const queryParams = ivrHttpRequestNode.parameters.queryParameters.parameters
-    const clientIdParam = queryParams.find(
-      (p: any) => p?.name === 'client_id'
-    )
-    if (clientIdParam) {
-      clientIdParam.value = `eq.${clientData.clientId}`
+  
+  console.log(`📡 Found ${httpRequestNodes.length} HTTP Request nodes`)
+  
+  httpRequestNodes.forEach((node: any, index: number) => {
+    console.log(`  ${index + 1}. ${node.name || 'Unnamed Node'}`)
+    
+    // Check query parameters
+    if (node.parameters?.queryParameters?.parameters) {
+      const queryParams = node.parameters.queryParameters.parameters
+      const clientIdParam = queryParams.find((p: any) => p?.name === 'client_id')
+      
+      if (clientIdParam) {
+        const oldValue = clientIdParam.value
+        const newValue = `eq.${clientData.clientId}`
+        console.log(`🔄 Found client_id in "${node.name}":`)
+        console.log(`   📥 OLD: "${oldValue}"`)  
+        console.log(`   📤 NEW: "${newValue}"`)
+        clientIdParam.value = newValue
+      }
     }
-  }
+    
+    // Check body parameters too (just in case)
+    if (node.parameters?.bodyParameters?.parameters) {
+      const bodyParams = node.parameters.bodyParameters.parameters
+      const clientIdParam = bodyParams.find((p: any) => p?.name === 'client_id')
+      
+      if (clientIdParam) {
+        const oldValue = clientIdParam.value
+        const newValue = `eq.${clientData.clientId}`
+        console.log(`🔄 Found client_id in body of "${node.name}":`)
+        console.log(`   📥 OLD: "${oldValue}"`)  
+        console.log(`   📤 NEW: "${newValue}"`)
+        clientIdParam.value = newValue
+      }
+    }
+  })
 
   // 6. Update "SET BUSINESS NAME" node
   const setBusinessNameNode = nodes.find(

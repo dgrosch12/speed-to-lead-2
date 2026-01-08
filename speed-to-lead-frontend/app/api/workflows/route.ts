@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { business_name, owner_name, business_phone, twilio_number, link_existing_workflow, existing_n8n_workflow_id, force_create } = body
+    const { business_name, owner_name, business_phone, twilio_number, agency_id, link_existing_workflow, existing_n8n_workflow_id, force_create } = body
 
     // Validate required fields
     if (!business_name || !owner_name || !business_phone || !twilio_number) {
@@ -137,16 +137,23 @@ export async function POST(request: NextRequest) {
       clientDbId = existingClient.id
       
       // Update client info in case anything changed
+      const updateData: any = {
+        name: business_name,
+        business_name,
+        owner_name,
+        business_phone,
+        twilio_number,
+        updated_at: new Date().toISOString()
+      }
+      
+      // Only update agency_id if it's provided
+      if (agency_id) {
+        updateData.agency_id = agency_id
+      }
+      
       const { error: updateError } = await supabase
         .from('clients')
-        .update({
-          name: business_name,
-          business_name,
-          owner_name,
-          business_phone,
-          twilio_number,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', business_name)
       
       if (updateError) {
@@ -156,16 +163,23 @@ export async function POST(request: NextRequest) {
     } else {
       // Client doesn't exist, create it
       console.log('Creating new client in Supabase:', business_name)
+      const insertData: any = {
+        id: business_name,
+        name: business_name,
+        business_name,
+        owner_name,
+        business_phone,
+        twilio_number
+      }
+      
+      // Include agency_id if provided
+      if (agency_id) {
+        insertData.agency_id = agency_id
+      }
+      
       const { data: newClient, error: clientError } = await supabase
         .from('clients')
-        .insert({
-          id: business_name,
-          name: business_name,
-          business_name,
-          owner_name,
-          business_phone,
-          twilio_number
-        })
+        .insert(insertData)
         .select()
         .single()
 

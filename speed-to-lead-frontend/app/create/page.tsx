@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import AgencyModal from '@/app/components/AgencyModal'
+import type { Agency } from '@/lib/supabase'
 
 export default function CreateWorkflowPage() {
   const router = useRouter()
@@ -9,11 +11,78 @@ export default function CreateWorkflowPage() {
     business_name: '',
     owner_name: '',
     business_phone: '',
-    twilio_number: ''
+    twilio_number: '',
+    agency_id: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [existingWorkflow, setExistingWorkflow] = useState<any>(null)
+  const [agencies, setAgencies] = useState<Agency[]>([])
+  const [loadingAgencies, setLoadingAgencies] = useState(true)
+  const [showAgencyModal, setShowAgencyModal] = useState(false)
+
+  // Fetch agencies on component mount
+  useEffect(() => {
+    fetchAgencies()
+  }, [])
+
+  const fetchAgencies = async () => {
+    try {
+      const response = await fetch('/api/agencies')
+      const result = await response.json()
+      if (response.ok) {
+        setAgencies(result.agencies || [])
+      }
+    } catch (error) {
+      console.error('Error fetching agencies:', error)
+    } finally {
+      setLoadingAgencies(false)
+    }
+  }
+
+  const handleAgencyCreated = (agency: Agency) => {
+    setAgencies(prev => [...prev, agency])
+    setFormData(prev => ({ ...prev, agency_id: agency.id }))
+  }
+
+  // Convert phone number to E.164 format (+1XXXXXXXXXX)
+  const formatPhoneNumber = (phone: string): string => {
+    if (!phone) return ''
+    
+    // Remove all non-digit characters
+    const digits = phone.replace(/\D/g, '')
+    
+    // If it's already in +1XXXXXXXXXX format, return as is
+    if (phone.startsWith('+1') && digits.length === 11) {
+      return phone
+    }
+    
+    // If it starts with +1, extract the digits after +1
+    if (phone.startsWith('+1')) {
+      const cleanDigits = digits.substring(1) // Remove the leading 1
+      if (cleanDigits.length === 10) {
+        return `+1${cleanDigits}`
+      }
+    }
+    
+    // If it's 10 digits, add +1
+    if (digits.length === 10) {
+      return `+1${digits}`
+    }
+    
+    // If it's 11 digits and starts with 1, add +
+    if (digits.length === 11 && digits.startsWith('1')) {
+      return `+${digits}`
+    }
+    
+    // If it's already in correct format, return as is
+    if (phone.startsWith('+') && digits.length === 11) {
+      return phone
+    }
+    
+    // Return the original if we can't format it
+    return phone
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -21,13 +90,31 @@ export default function CreateWorkflowPage() {
     setError('')
     setExistingWorkflow(null)
 
+    // Format phone numbers before submitting
+    const formattedData: any = {
+      ...formData,
+      business_phone: formatPhoneNumber(formData.business_phone),
+      twilio_number: formatPhoneNumber(formData.twilio_number),
+    }
+    
+    // Log what we're sending
+    console.log('Creating client with data:', formattedData)
+    
+    // Only include agency_id if it's set
+    if (!formattedData.agency_id) {
+      console.warn('⚠️ No agency_id provided - client will be created without an agency')
+      delete formattedData.agency_id
+    } else {
+      console.log('✅ Agency ID included:', formattedData.agency_id)
+    }
+
     try {
       const response = await fetch('/api/workflows', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(formattedData),
       })
 
       const result = await response.json()
@@ -43,8 +130,13 @@ export default function CreateWorkflowPage() {
         throw new Error(result.error || 'Failed to create workflow')
       }
 
-      // Redirect to the new workflow detail page
-      router.push(`/workflow/${result.workflow.id}`)
+      // Redirect to the workflow detail page to see the new client's workflow
+      if (result.workflow?.id) {
+        window.location.href = `/workflow/${result.workflow.id}` // Show the new workflow details
+      } else {
+        // Fallback to dashboard if no workflow ID
+        window.location.href = '/dashboard'
+      }
     } catch (error) {
       console.error('Error creating workflow:', error)
       setError(error instanceof Error ? error.message : 'Failed to create workflow')
@@ -66,6 +158,9 @@ export default function CreateWorkflowPage() {
         },
         body: JSON.stringify({
           ...formData,
+          business_phone: formatPhoneNumber(formData.business_phone),
+          twilio_number: formatPhoneNumber(formData.twilio_number),
+          agency_id: formData.agency_id || undefined,
           link_existing_workflow: true,
           existing_n8n_workflow_id: existingWorkflow.id
         }),
@@ -77,8 +172,13 @@ export default function CreateWorkflowPage() {
         throw new Error(result.error || 'Failed to link workflow')
       }
 
-      // Redirect to the workflow detail page
-      router.push(`/workflow/${result.workflow.id}`)
+      // Redirect to the workflow detail page to see the linked workflow
+      if (result.workflow?.id) {
+        window.location.href = `/workflow/${result.workflow.id}` // Show the linked workflow details
+      } else {
+        // Fallback to dashboard if no workflow ID
+        window.location.href = '/dashboard'
+      }
     } catch (error) {
       console.error('Error linking workflow:', error)
       setError(error instanceof Error ? error.message : 'Failed to link workflow')
@@ -99,6 +199,9 @@ export default function CreateWorkflowPage() {
         },
         body: JSON.stringify({
           ...formData,
+          business_phone: formatPhoneNumber(formData.business_phone),
+          twilio_number: formatPhoneNumber(formData.twilio_number),
+          agency_id: formData.agency_id || undefined,
           force_create: true // Skip checking for existing workflows
         }),
       })
@@ -109,8 +212,13 @@ export default function CreateWorkflowPage() {
         throw new Error(result.error || 'Failed to create workflow')
       }
 
-      // Redirect to the new workflow detail page
-      router.push(`/workflow/${result.workflow.id}`)
+      // Redirect to the workflow detail page to see the new workflow
+      if (result.workflow?.id) {
+        window.location.href = `/workflow/${result.workflow.id}` // Show the new workflow details
+      } else {
+        // Fallback to dashboard if no workflow ID
+        window.location.href = '/dashboard'
+      }
     } catch (error) {
       console.error('Error creating workflow:', error)
       setError(error instanceof Error ? error.message : 'Failed to create workflow')
@@ -121,6 +229,14 @@ export default function CreateWorkflowPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handlePhoneBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    const formatted = formatPhoneNumber(value)
+    if (formatted !== value) {
+      setFormData(prev => ({ ...prev, [name]: formatted }))
+    }
   }
 
   return (
@@ -177,6 +293,38 @@ export default function CreateWorkflowPage() {
       <div className="card">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
+            <label htmlFor="agency_id" className="label">
+              Marketing Agency *
+            </label>
+            <div className="flex gap-2">
+              <select
+                id="agency_id"
+                name="agency_id"
+                value={formData.agency_id}
+                onChange={handleInputChange}
+                required
+                className="input flex-1"
+                disabled={loadingAgencies}
+              >
+                <option value="">Select an agency...</option>
+                {agencies.map((agency) => (
+                  <option key={agency.id} value={agency.id}>
+                    {agency.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAgencyModal(true)}
+                className="btn btn-secondary whitespace-nowrap"
+                disabled={loadingAgencies}
+              >
+                Add New Agency
+              </button>
+            </div>
+          </div>
+
+          <div>
             <label htmlFor="business_name" className="label">
               Business Name *
             </label>
@@ -218,9 +366,10 @@ export default function CreateWorkflowPage() {
               name="business_phone"
               value={formData.business_phone}
               onChange={handleInputChange}
+              onBlur={handlePhoneBlur}
               required
               className="input"
-              placeholder="e.g., +12547021243"
+              placeholder="e.g., (256) 406-4689 or +12564064689"
             />
           </div>
 
@@ -234,9 +383,10 @@ export default function CreateWorkflowPage() {
               name="twilio_number"
               value={formData.twilio_number}
               onChange={handleInputChange}
+              onBlur={handlePhoneBlur}
               required
               className="input"
-              placeholder="e.g., +12544101386"
+              placeholder="e.g., (256) 406-4689 or +12564064689"
             />
           </div>
 
@@ -266,6 +416,12 @@ export default function CreateWorkflowPage() {
           </div>
         </form>
       </div>
+
+      <AgencyModal
+        isOpen={showAgencyModal}
+        onClose={() => setShowAgencyModal(false)}
+        onAgencyCreated={handleAgencyCreated}
+      />
     </div>
   )
 }

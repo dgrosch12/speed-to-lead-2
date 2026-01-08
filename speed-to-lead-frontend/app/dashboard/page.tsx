@@ -9,9 +9,11 @@ import {
   MagnifyingGlassIcon,
   ClipboardDocumentIcon,
   ArrowTopRightOnSquareIcon as ExternalLinkIcon,
-  TrashIcon
+  TrashIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
-import type { Client } from '@/lib/supabase'
+import AgencyModal from '@/app/components/AgencyModal'
+import type { Client, Agency } from '@/lib/supabase'
 
 interface ClientWithWorkflow extends Client {
   n8n_url?: string
@@ -23,36 +25,14 @@ interface ClientWithWorkflow extends Client {
 export default function DashboardPage() {
   const router = useRouter()
   const [clients, setClients] = useState<ClientWithWorkflow[]>([])
+  const [agencies, setAgencies] = useState<Agency[]>([])
+  const [activeAgencyId, setActiveAgencyId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [deletingClientId, setDeletingClientId] = useState<string | null>(null)
-  // Persist deleted IDs in localStorage so they don't come back on refresh
-  const [deletedClientIds, setDeletedClientIds] = useState<Set<string>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('deletedClientIds')
-      if (saved) {
-        try {
-          return new Set(JSON.parse(saved))
-        } catch (e) {
-          return new Set()
-        }
-      }
-    }
-    return new Set()
-  })
-  
-  // Update localStorage whenever deletedClientIds changes
-  const updateDeletedClientIds = (updater: (prev: Set<string>) => Set<string>) => {
-    setDeletedClientIds(prev => {
-      const newSet = updater(prev)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('deletedClientIds', JSON.stringify(Array.from(newSet)))
-      }
-      return newSet
-    })
-  }
+  const [showAgencyModal, setShowAgencyModal] = useState(false)
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -63,276 +43,150 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    console.log('Dashboard component mounted, clearing any cached data and fetching fresh...')
+    
+    // Clear any potential browser storage that might contain stale client data
+    try {
+      localStorage.removeItem('clients')
+      sessionStorage.removeItem('clients')
+    } catch (e) {
+      // Storage might not be available, ignore
+    }
+    
+    fetchAgencies()
     fetchClients()
   }, [])
 
+  // Set active agency when agencies are loaded
+  useEffect(() => {
+    if (agencies.length > 0 && !activeAgencyId) {
+      const firstAgencyId = agencies[0].id
+      console.log('Setting active agency from useEffect:', firstAgencyId, agencies[0].name)
+      setActiveAgencyId(firstAgencyId)
+    }
+  }, [agencies, activeAgencyId])
+
+  // Refresh clients when page becomes visible (user navigates back)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Page became visible, refreshing data...')
+        fetchClients()
+        fetchAgencies()
+      }
+    }
+
+    const handleFocus = () => {
+      console.log('Window focused, refreshing data...')
+      fetchClients()
+      fetchAgencies()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [])
+
+  const fetchAgencies = async () => {
+    try {
+      const response = await fetch('/api/agencies')
+      const result = await response.json()
+      if (response.ok) {
+        const agenciesList = result.agencies || []
+        console.log('Fetched agencies:', agenciesList)
+        setAgencies(agenciesList)
+        // Set first agency as active if none selected
+        if (agenciesList.length > 0) {
+          // Always set to first agency if not set, or if current activeAgencyId doesn't exist in list
+          const currentAgencyExists = activeAgencyId && agenciesList.some(a => a.id === activeAgencyId)
+          if (!activeAgencyId || !currentAgencyExists) {
+            const firstAgencyId = agenciesList[0].id
+            console.log('Setting active agency to:', firstAgencyId, agenciesList[0].name)
+            setActiveAgencyId(firstAgencyId)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching agencies:', error)
+    }
+  }
+
+  const handleAgencyCreated = (agency: Agency) => {
+    setAgencies(prev => [...prev, agency])
+    setActiveAgencyId(agency.id)
+    // Refresh clients to show any clients for the new agency
+    fetchClients()
+  }
+
   const fetchClients = async () => {
     try {
-      // Fetch clients, workflows from Supabase, and n8n workflows in parallel
-      // Add cache: 'no-store' and timestamp to force fresh data
-      const timestamp = new Date().getTime()
-      const fetchOptions = { 
-        cache: 'no-store' as RequestCache,
+      setLoading(true)
+      setError('')
+      
+      // Clear existing clients state immediately
+      setClients([])
+      
+      console.log('🔄 Fetching ALL clients from Supabase...')
+      
+      // Simple fetch with cache busting - no overengineering
+      const response = await fetch(`/api/clients?t=${Date.now()}`, {
+        cache: 'no-store',
         headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
+          'Cache-Control': 'no-cache'
         }
-      }
-      const [clientsResponse, supabaseWorkflowsResponse, n8nWorkflowsResponse] = await Promise.all([
-        fetch(`/api/clients?t=${timestamp}`, fetchOptions),
-        fetch(`/api/workflows?t=${timestamp}`, fetchOptions).catch(() => ({ ok: false, json: () => ({ workflows: [] }) })),
-        fetch(`/api/n8n/workflows?t=${timestamp}`, fetchOptions).catch(() => ({ ok: false, json: () => ({ workflows: [] }) }))
-      ])
-      
-      const clientsData = await clientsResponse.json()
-      const supabaseWorkflowsData = await supabaseWorkflowsResponse.json()
-      const n8nWorkflowsData = await n8nWorkflowsResponse.json()
-      
-      if (!clientsResponse.ok) {
-        throw new Error(clientsData.error || 'Failed to fetch clients')
-      }
-      
-      // Log exactly what we received from the API
-      const rawClients = clientsData.clients || []
-      console.log('=== DASHBOARD CLIENT FETCH ===')
-      console.log('Raw clients received from Supabase API:', rawClients.length)
-      console.log('Client IDs received:', rawClients.map((c: any) => c.id || c.name || 'NO-ID'))
-      
-      // VALIDATE: Filter out any invalid clients (missing id or name)
-      const validClients = rawClients.filter((c: any) => {
-        if (!c.id && !c.name) {
-          console.warn('Filtering out invalid client (no id or name):', c)
-          return false
-        }
-        
-        // Explicitly filter out Grosch HVAC if it somehow appears
-        const isGrosch = (c.id && c.id.toLowerCase().includes('grosch')) || 
-                        (c.name && c.name.toLowerCase().includes('grosch'))
-        if (isGrosch) {
-          console.error('⚠️ Filtering out Grosch HVAC - should not be in Supabase:', c)
-          return false
-        }
-        
-        return true
       })
       
-      if (validClients.length !== rawClients.length) {
-        console.warn(`Filtered out ${rawClients.length - validClients.length} invalid clients`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch clients')
       }
       
-      // CRITICAL: Only show clients that exist in Supabase
-      // Do NOT create clients from n8n workflows - only show what's in the clients table
-      if (validClients.length === 0) {
-        console.log('No valid clients found in Supabase')
-        setClients([])
-        setLoading(false)
-        return
+      const data = await response.json()
+      const clients = data.clients || []
+      
+      console.log(`📋 Found ${clients.length} clients in Supabase:`)
+      clients.forEach((client: any, index: number) => {
+        console.log(`  ${index + 1}. ${client.name || client.id}`)
+      })
+      
+      // Fetch workflows to enrich client data  
+      const workflowResponse = await fetch(`/api/workflows?t=${Date.now()}`, {
+        cache: 'no-store'
+      }).catch(() => ({ ok: false, json: () => ({ workflows: [] }) }))
+      
+      let workflows: any[] = []
+      if (workflowResponse.ok) {
+        const workflowData = await workflowResponse.json()
+        workflows = workflowData.workflows || []
       }
       
-      // Get workflows from Supabase (preferred source for webhook URLs)
-      const supabaseWorkflows = supabaseWorkflowsData.workflows || []
-      console.log('Supabase workflows:', supabaseWorkflows.map((w: any) => ({ 
-        id: w.id, 
-        client_id: w.client_id, 
-        workflow_name: w.workflow_name 
-      })))
-      
-      // Get workflows from n8n (only for webhook extraction, NOT for creating clients)
-      const n8nWorkflows = n8nWorkflowsData.workflows || []
-      
-      // Specific mappings for known clients (override automatic matching)
-      const clientWorkflowMap: Record<string, string> = {
-        'High Caliber': 'vc044ImIQ6wrSFyD',
-        // Add more specific mappings here if needed
-      }
-      
-      // Match workflows to clients by name
-      // IMPORTANT: ONLY process clients that exist in Supabase - never create clients from n8n workflows
-      const clientsWithWorkflows = validClients.map((client: Client) => {
-        const clientName = (client.name || client.id).toLowerCase()
-        const clientId = client.id
-        
-        // First, check if we have workflows in Supabase for this client
-        // Find ALL workflows for this client (there might be duplicates)
-        const matchingWorkflows = supabaseWorkflows.filter((w: any) => {
-          // Match by client_id (exact match) - this is the primary matching method
-          if (w.client_id === clientId) {
-            return true
-          }
-          // Match by workflow name containing client name
-          if (w.workflow_name && clientName) {
-            const workflowNameLower = w.workflow_name.toLowerCase()
-            // Check if workflow name starts with client name (e.g., "Sub Thermal H&C - STL" starts with "sub thermal h&c")
-            if (workflowNameLower.startsWith(clientName) || workflowNameLower.includes(clientName)) {
-              return true
-            }
-          }
-          return false
-        })
-        
-        // If multiple workflows found, prefer active ones, then most recent
-        let supabaseWorkflow = null
-        if (matchingWorkflows.length > 0) {
-          if (matchingWorkflows.length > 1) {
-            console.warn(`Multiple workflows found for client ${clientId}:`, matchingWorkflows.map((w: any) => ({ id: w.id, status: w.status, created_at: w.created_at })))
-          }
-          
-          // Sort: active first, then by created_at (most recent first)
-          const sorted = matchingWorkflows.sort((a: any, b: any) => {
-            // Active workflows first
-            if (a.status === 'active' && b.status !== 'active') return -1
-            if (a.status !== 'active' && b.status === 'active') return 1
-            // Then by created_at (most recent first)
-            const aDate = a.created_at ? new Date(a.created_at).getTime() : 0
-            const bDate = b.created_at ? new Date(b.created_at).getTime() : 0
-            return bDate - aDate
-          })
-          
-          supabaseWorkflow = sorted[0]
-          console.log(`Matched ${clientId} to workflow ${supabaseWorkflow.id} (status: ${supabaseWorkflow.status}, chosen from ${matchingWorkflows.length} workflows)`)
-        }
-        
-        if (supabaseWorkflow) {
-          // Use Supabase workflow data (most reliable - has correct webhook URLs)
-          // Include workflow even if lead_form_webhook is missing (it might be extracted later)
+      // Add workflow info to clients
+      const clientsWithWorkflows = clients.map((client: any) => {
+        const workflow = workflows.find((w: any) => w.client_id === client.id)
+        if (workflow) {
           return {
             ...client,
-            n8n_url: supabaseWorkflow.n8n_url,
-            workflow_id: supabaseWorkflow.id, // Use Supabase UUID for workflow detail page
-            workflow_name: supabaseWorkflow.workflow_name,
-            workflow_status: supabaseWorkflow.status, // Include workflow status
-            lead_form_webhook: supabaseWorkflow.lead_form_webhook || null,
-            ivr_webhook: supabaseWorkflow.ivr_webhook || null
+            workflow_id: workflow.id,
+            workflow_status: workflow.status,
+            n8n_url: workflow.n8n_url,
+            lead_form_webhook: workflow.lead_form_webhook,
+            ivr_webhook: workflow.ivr_webhook
           }
         }
-        
-        console.log(`No Supabase workflow found for client ${clientId} (${clientName})`)
-        
-        // Only match workflows if client exists in Supabase (we already know it does since we're in rawClients)
-        // Fallback: Check for specific mapping (only for known clients)
-        const specificWorkflowId = clientWorkflowMap[client.name || client.id]
-        if (specificWorkflowId) {
-          const specificWorkflow = n8nWorkflows.find((w: any) => w.id === specificWorkflowId)
-          if (specificWorkflow) {
-            return {
-              ...client,
-              n8n_url: specificWorkflow.n8n_url,
-              workflow_id: specificWorkflow.id, // Use n8n ID - API will handle it
-              workflow_name: specificWorkflow.name,
-              lead_form_webhook: specificWorkflow.lead_form_webhook
-            }
-          }
-        }
-        
-        // Fallback: Try to find a matching workflow by name in n8n (only if client exists in Supabase)
-        const matchingWorkflow = n8nWorkflows.find((workflow: any) => {
-          const workflowName = workflow.name.toLowerCase()
-          
-          // Check if workflow name contains client name (e.g., "High Caliber - STL" contains "High Caliber")
-          // Or if client name contains workflow name
-          return workflowName.includes(clientName) || 
-                 clientName.includes(workflowName.split(' - ')[0]) ||
-                 workflowName.includes(clientName.split(' ')[0]) // Match first word
-        })
-        
-        if (matchingWorkflow) {
-          return {
-            ...client,
-            n8n_url: matchingWorkflow.n8n_url,
-            workflow_id: matchingWorkflow.id, // Use n8n ID - API will handle it
-            workflow_name: matchingWorkflow.name,
-            lead_form_webhook: matchingWorkflow.lead_form_webhook
-          }
-        }
-        
-        // Return client as-is (it exists in Supabase, just no workflow)
         return client
       })
       
-      console.log('Final clients array length:', clientsWithWorkflows.length)
-      console.log('Final client IDs:', clientsWithWorkflows.map((c: any) => c.id || c.name || 'NO-ID'))
+      // Set the clients state - this is the ONLY source of what gets displayed
+      setClients(clientsWithWorkflows)
+      console.log('✅ Dashboard updated with current Supabase data')
       
-      // Final validation: Only set clients that have valid IDs and exist in rawClients
-      // This prevents showing clients that were somehow created from n8n workflows
-      // Also filter out any clients that have been marked as deleted (from localStorage)
-      // BUT: If a client exists in Supabase but is marked as deleted, remove it from deleted list (it was recreated)
-      const currentDeletedIds = new Set<string>()
-      if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('deletedClientIds')
-        if (saved) {
-          try {
-            JSON.parse(saved).forEach((id: string) => currentDeletedIds.add(id))
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
-      }
-      
-      // Check if any clients in Supabase are marked as deleted - only remove from deleted list if:
-      // 1. The client was created recently (within last 5 minutes) - indicates it was recreated
-      // 2. OR the client has a workflow - indicates it was properly recreated with a workflow
-      // This prevents removing from deleted list if the delete API call is still in progress
-      const idsToRemoveFromDeleted: string[] = []
-      const now = Date.now()
-      const fiveMinutesAgo = now - (5 * 60 * 1000)
-      
-      rawClients.forEach((rc: any) => {
-        if (currentDeletedIds.has(rc.id)) {
-          const createdAt = rc.created_at ? new Date(rc.created_at).getTime() : 0
-          const wasCreatedRecently = createdAt > fiveMinutesAgo
-          
-          // Check if client has a workflow in Supabase (indicates proper recreation)
-          const hasWorkflow = supabaseWorkflows.some((w: any) => w.client_id === rc.id)
-          
-          if (wasCreatedRecently || hasWorkflow) {
-            console.log(`✅ Client ${rc.id} exists in Supabase and was ${wasCreatedRecently ? 'recently created' : 'has workflow'} - removing from deleted list (recreated)`)
-            idsToRemoveFromDeleted.push(rc.id)
-          } else {
-            console.log(`🚫 Client ${rc.id} exists in Supabase but was NOT recently created and has no workflow - keeping in deleted list (delete may be in progress)`)
-          }
-        }
-      })
-      
-      // Remove recreated clients from deleted list
-      if (idsToRemoveFromDeleted.length > 0) {
-        updateDeletedClientIds(prev => {
-          const updated = new Set(prev)
-          idsToRemoveFromDeleted.forEach(id => updated.delete(id))
-          return updated
-        })
-        idsToRemoveFromDeleted.forEach(id => currentDeletedIds.delete(id))
-      }
-      
-      const validatedClients = clientsWithWorkflows.filter(client => {
-        const existsInSupabase = rawClients.some(rc => rc.id === client.id)
-        const isDeleted = currentDeletedIds.has(client.id)
-        
-        // CRITICAL: Never show a client if it's marked as deleted, even if it exists in Supabase
-        // (The delete API call might still be in progress, or there might be a sync issue)
-        if (isDeleted) {
-          console.log(`🚫 BLOCKING client ${client.id} - marked as deleted in localStorage (will not show even if in Supabase)`)
-          return false
-        }
-        
-        if (!existsInSupabase) {
-          console.warn(`⚠️ Filtering out client ${client.id} - not in Supabase response`)
-          return false
-        }
-        
-        return true
-      })
-      
-      if (validatedClients.length !== clientsWithWorkflows.length) {
-        console.warn(`Filtered out ${clientsWithWorkflows.length - validatedClients.length} clients not in Supabase`)
-      }
-      
-      console.log('==============================')
-      
-      // Set clients - they will be filtered by deletedClientIds in the render
-      setClients(validatedClients)
     } catch (error) {
-      console.error('Error fetching clients:', error)
-      setError(error instanceof Error ? error.message : 'Failed to load clients')
+      console.error('❌ Error fetching clients:', error)
+      setError('Failed to load clients')
+      setClients([])
     } finally {
       setLoading(false)
     }
@@ -348,82 +202,54 @@ export default function DashboardPage() {
 
   const handleDeleteClient = async (clientId: string, clientName: string) => {
     // Confirm deletion first
-    if (!confirm(`Are you sure you want to remove "${clientName}" from the dashboard?`)) {
+    if (!confirm(`Are you sure you want to delete "${clientName}"? This will remove the client and all associated workflows from Supabase.`)) {
       return
     }
 
-    // IMMEDIATELY remove from UI and mark as deleted
-    console.log('🗑️ Removing client from UI immediately:', clientId)
-    console.log('Current clients state:', clients.map(c => ({ id: c.id, name: c.name })))
-    console.log('Current deletedClientIds:', Array.from(deletedClientIds))
-    
-    // Add to deleted set FIRST to prevent it from reappearing (persisted to localStorage)
-    updateDeletedClientIds(prev => {
-      const updated = new Set(prev)
-      updated.add(clientId)
-      console.log('✅ Added to deleted set (persisted):', Array.from(updated))
-      return updated
-    })
-    
-    // Remove from clients state IMMEDIATELY
-    setClients(prevClients => {
-      const before = prevClients.length
-      const filtered = prevClients.filter(c => {
-        const matches = c.id === clientId
-        if (matches) {
-          console.log('Removing client:', { id: c.id, name: c.name })
-        }
-        return !matches
-      })
-      console.log(`✅ Removed from clients state. Before: ${before}, After: ${filtered.length}`)
-      console.log('Remaining clients:', filtered.map(c => ({ id: c.id, name: c.name })))
-      return filtered
-    })
-    
     setDeletingClientId(clientId)
     setError('')
-    
-    // Force a re-render
-    setTimeout(() => {
-      console.log('Force checking deletedClientIds after update:', Array.from(deletedClientIds))
-    }, 100)
 
-    // Then try to delete from Supabase (but don't wait for it)
-    // If it doesn't exist, that's fine - we already removed it from UI
-
-    // Try to delete from Supabase in the background (non-blocking)
-    // We've already removed it from UI, so this is just cleanup
-    fetch(`/api/clients/${clientId}?t=${new Date().getTime()}`, {
-      method: 'DELETE',
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache'
-      }
-    })
-      .then(async (response) => {
-        const data = await response.json()
-        if (response.ok) {
-          console.log('✅ Client deleted from Supabase:', data)
-          // Don't refresh - we've already removed it from UI and it's deleted from Supabase
-          // Only refresh if there was an error
-        } else if (response.status === 404) {
-          console.log('ℹ️ Client not found in Supabase (already deleted)')
-          // Don't refresh - client is already gone
-        } else {
-          console.error('❌ Error deleting from Supabase:', data.error)
-          // Only refresh on error to see if we need to sync state
-          setTimeout(() => fetchClients(), 500)
+    try {
+      // Delete from Supabase
+      const response = await fetch(`/api/clients/${clientId}?t=${new Date().getTime()}`, {
+        method: 'DELETE',
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
         }
       })
-      .catch((error) => {
-        console.error('❌ Error calling delete API:', error)
-        // Only refresh on error to see if we need to sync state
-        setTimeout(() => fetchClients(), 500)
-      })
-      .finally(() => {
-        setDeletingClientId(null)
-      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        // If client not found, refresh the list anyway to remove it from UI
+        if (response.status === 404 || data.error?.includes('not found') || data.error?.includes('Not found')) {
+          console.warn(`Client "${clientName}" (${clientId}) not found in Supabase - refreshing list to remove from UI`)
+          await fetchClients()
+          setError(`"${clientName}" was not found in Supabase and has been removed from the dashboard.`)
+          setTimeout(() => setError(''), 5000)
+          return
+        }
+        throw new Error(data.error || 'Failed to delete client')
+      }
+
+      console.log(`✅ Successfully deleted client "${clientName}" (${clientId})`)
+      
+      // Brief delay to ensure database transaction is fully committed
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      // Refresh clients list after successful deletion to ensure UI matches Supabase
+      await fetchClients()
+    } catch (error) {
+      console.error('Error deleting client:', error)
+      setError(error instanceof Error ? error.message : 'Failed to delete client')
+      // Brief delay and refresh list anyway in case the client was already deleted
+      await new Promise(resolve => setTimeout(resolve, 100))
+      await fetchClients()
+    } finally {
+      setDeletingClientId(null)
+    }
   }
 
   if (loading) {
@@ -436,11 +262,31 @@ export default function DashboardPage() {
   }
 
   const q = searchQuery.trim().toLowerCase()
-  // Filter out deleted clients from display
-  const activeClients = clients.filter(c => !deletedClientIds.has(c.id))
+  
+  // Filter by active agency if one is selected
+  const agencyFilteredClients = activeAgencyId
+    ? clients.filter(c => {
+        const clientAgencyId = c.agency_id ? String(c.agency_id) : null
+        const activeId = String(activeAgencyId)
+        return clientAgencyId === activeId
+      })
+    : clients
+  
+  // Filter by search query
   const filteredClients = q
-    ? activeClients.filter((c) => ((c.name || c.id) as string).toLowerCase().includes(q))
-    : activeClients
+    ? agencyFilteredClients.filter((c) => ((c.name || c.id) as string).toLowerCase().includes(q))
+    : agencyFilteredClients
+
+  // Group clients by agency for tab counts
+  const clientsByAgency = agencies.reduce((acc, agency) => {
+    const agencyClients = clients.filter(c => {
+      const clientAgencyId = c.agency_id ? String(c.agency_id) : null
+      const agencyId = String(agency.id)
+      return clientAgencyId === agencyId
+    })
+    acc[agency.id] = agencyClients.length
+    return acc
+  }, {} as Record<string, number>)
 
   return (
     <div>
@@ -462,12 +308,56 @@ export default function DashboardPage() {
               className="input pl-9"
             />
           </div>
+          <button
+            onClick={() => setShowAgencyModal(true)}
+            className="btn btn-secondary flex items-center"
+          >
+            <BuildingOfficeIcon className="w-4 h-4 mr-2" />
+            New Agency
+          </button>
           <Link href="/create" className="btn btn-primary flex items-center">
             <PlusIcon className="w-4 h-4 mr-2" />
             New Client
           </Link>
         </div>
       </div>
+
+      {/* Agency Tabs */}
+      {agencies.length > 0 && (
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+            {agencies.map((agency) => {
+              const clientCount = clientsByAgency[agency.id] || 0
+              const isActive = activeAgencyId === agency.id
+              return (
+                <button
+                  key={agency.id}
+                  onClick={() => setActiveAgencyId(agency.id)}
+                  className={`
+                    whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
+                    ${
+                      isActive
+                        ? 'border-primary-500 text-primary-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }
+                  `}
+                >
+                  {agency.name}
+                  {clientCount > 0 && (
+                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
+                      isActive
+                        ? 'bg-primary-100 text-primary-600'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {clientCount}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -492,16 +382,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredClients
-            .filter(client => {
-              // Double-check: don't render if marked as deleted
-              if (deletedClientIds.has(client.id)) {
-                console.log('🚫 Skipping render for deleted client:', client.id)
-                return false
-              }
-              return true
-            })
-            .map((client) => {
+          {filteredClients.map((client) => {
             const cardContent = (
               <>
                 <div className="flex items-start justify-between mb-4">
@@ -682,6 +563,12 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <AgencyModal
+        isOpen={showAgencyModal}
+        onClose={() => setShowAgencyModal(false)}
+        onAgencyCreated={handleAgencyCreated}
+      />
     </div>
   )
 }

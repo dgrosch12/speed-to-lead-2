@@ -14,6 +14,17 @@ export const supabase = createClient(
 )
 
 // Types for our database tables
+export interface Agency {
+  id: string
+  name: string
+  n8n_instance_url?: string
+  n8n_api_key?: string
+  openai_api_key?: string
+  twilio_api_key?: string
+  created_at: string
+  updated_at?: string
+}
+
 export interface Client {
   id: string
   name: string
@@ -27,8 +38,10 @@ export interface Client {
   calls_7d?: number
   success_7d?: number
   status?: string
+  agency_id?: string
   created_at: string
   updated_at?: string
+  agency?: Agency
 }
 
 export interface Workflow {
