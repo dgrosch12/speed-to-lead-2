@@ -15,6 +15,57 @@ const supabase = supabaseUrl && supabaseServiceKey
     })
   : null
 
+// Update a specific client
+export async function PUT(request: Request) {
+  try {
+    if (!supabase) {
+      return NextResponse.json({ 
+        error: 'Supabase not configured',
+        details: 'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'
+      }, { status: 500 })
+    }
+
+    const body = await request.json()
+    const { id, website } = body
+
+    if (!id) {
+      return NextResponse.json({ error: 'Client ID is required' }, { status: 400 })
+    }
+
+    // Update the client's website
+    const { data, error } = await supabase
+      .from('clients')
+      .update({ website, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+
+    if (error) {
+      console.error('Error updating client:', error)
+      return NextResponse.json({ 
+        error: 'Failed to update client',
+        details: error.message
+      }, { status: 500 })
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      client: data[0],
+      message: `Client ${id} updated successfully`
+    })
+
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
 // Get all clients
 export async function GET(request: Request) {
   try {

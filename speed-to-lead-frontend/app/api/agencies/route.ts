@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
     const { data: agencies, error } = await supabase
       .from('agencies')
-      .select('id, name, n8n_instance_url, created_at, updated_at')
+      .select('id, name, n8n_instance_url, n8n_api_key, openai_api_key, twilio_api_key, created_at, updated_at')
       .order('name', { ascending: true })
 
     if (error) {
@@ -132,6 +132,83 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ agency }, { status: 201 })
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return NextResponse.json({ 
+      error: 'Internal server error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
+  }
+}
+
+// Update agency
+export async function PUT(request: NextRequest) {
+  try {
+    if (!supabase) {
+      return NextResponse.json({ 
+        error: 'Supabase not configured',
+        details: 'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY'
+      }, { status: 500 })
+    }
+
+    const body = await request.json()
+    const { id, name, n8n_instance_url, n8n_api_key, openai_api_key, twilio_api_key } = body
+
+    if (!id) {
+      return NextResponse.json({ 
+        error: 'Agency ID is required' 
+      }, { status: 400 })
+    }
+
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return NextResponse.json({ 
+        error: 'Agency name is required' 
+      }, { status: 400 })
+    }
+
+    // Build update object with only provided fields
+    const updateData: any = {
+      name: name.trim(),
+      updated_at: new Date().toISOString()
+    }
+
+    if (n8n_instance_url !== undefined) {
+      updateData.n8n_instance_url = n8n_instance_url?.trim() || null
+    }
+    if (n8n_api_key !== undefined) {
+      updateData.n8n_api_key = n8n_api_key?.trim() || null
+    }
+    if (openai_api_key !== undefined) {
+      updateData.openai_api_key = openai_api_key?.trim() || null
+    }
+    if (twilio_api_key !== undefined) {
+      updateData.twilio_api_key = twilio_api_key?.trim() || null
+    }
+
+    const { data: agency, error } = await supabase
+      .from('agencies')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating agency:', error)
+      
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ 
+          error: 'Agency not found' 
+        }, { status: 404 })
+      }
+
+      return NextResponse.json({ 
+        error: 'Failed to update agency',
+        details: error.message,
+        code: error.code
+      }, { status: 500 })
+    }
+
+    return NextResponse.json({ agency })
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json({ 

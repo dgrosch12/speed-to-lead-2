@@ -14,7 +14,20 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('workflows')
-      .select('*')
+      .select(`
+        *,
+        clients (
+          id,
+          name,
+          business_name,
+          owner_name,
+          business_phone,
+          twilio_number,
+          website,
+          agency_id,
+          created_at
+        )
+      `)
       .order('created_at', { ascending: false })
 
     // Filter by client_id if provided
@@ -71,7 +84,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { business_name, owner_name, business_phone, twilio_number, agency_id, link_existing_workflow, existing_n8n_workflow_id, force_create } = body
+    const { business_name, owner_name, business_phone, twilio_number, website, agency_id, link_existing_workflow, existing_n8n_workflow_id, force_create } = body
 
     // Validate required fields
     if (!business_name || !owner_name || !business_phone || !twilio_number) {
@@ -143,6 +156,7 @@ export async function POST(request: NextRequest) {
         owner_name,
         business_phone,
         twilio_number,
+        website,
         updated_at: new Date().toISOString()
       }
       
@@ -169,7 +183,8 @@ export async function POST(request: NextRequest) {
         business_name,
         owner_name,
         business_phone,
-        twilio_number
+        twilio_number,
+        website
       }
       
       // Include agency_id if provided

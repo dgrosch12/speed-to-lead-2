@@ -9,7 +9,11 @@ import {
   ArrowTopRightOnSquareIcon as ExternalLinkIcon,
   CheckCircleIcon,
   PauseIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  GlobeAltIcon,
+  PencilIcon,
+  CheckIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 import type { Workflow } from '@/lib/supabase'
 
@@ -21,6 +25,8 @@ interface WorkflowWithClient extends Workflow {
     owner_name: string
     business_phone: string
     twilio_number: string
+    website?: string
+    created_at: string
   }
 }
 
@@ -32,6 +38,9 @@ export default function WorkflowDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [copySuccess, setCopySuccess] = useState<string | null>(null)
+  const [isEditingWebsite, setIsEditingWebsite] = useState(false)
+  const [websiteInput, setWebsiteInput] = useState('')
+  const [websiteUpdateLoading, setWebsiteUpdateLoading] = useState(false)
 
   useEffect(() => {
     if (workflowId) {
@@ -64,6 +73,54 @@ export default function WorkflowDetailPage() {
       setTimeout(() => setCopySuccess(null), 2000)
     } catch (error) {
       console.error('Failed to copy:', error)
+    }
+  }
+
+  const handleEditWebsite = () => {
+    setIsEditingWebsite(true)
+    setWebsiteInput(workflow?.clients.website || '')
+  }
+
+  const handleCancelWebsiteEdit = () => {
+    setIsEditingWebsite(false)
+    setWebsiteInput('')
+  }
+
+  const handleSaveWebsite = async () => {
+    if (!workflow) return
+    
+    setWebsiteUpdateLoading(true)
+    try {
+      const response = await fetch('/api/clients', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: workflow.clients.id,
+          website: websiteInput
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update website')
+      }
+
+      // Update local state
+      setWorkflow(prev => prev ? {
+        ...prev,
+        clients: {
+          ...prev.clients,
+          website: websiteInput
+        }
+      } : null)
+
+      setIsEditingWebsite(false)
+    } catch (error) {
+      console.error('Error updating website:', error)
+      alert('Failed to update website. Please try again.')
+    } finally {
+      setWebsiteUpdateLoading(false)
     }
   }
 
@@ -258,6 +315,68 @@ export default function WorkflowDetailPage() {
               <div>
                 <p className="font-medium text-gray-900">Client ID</p>
                 <p className="font-mono text-gray-600">{workflow.clients.id}</p>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="font-medium text-gray-900">Website</p>
+                  {!isEditingWebsite && (
+                    <button
+                      onClick={handleEditWebsite}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Edit website"
+                    >
+                      <PencilIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {isEditingWebsite ? (
+                  <div className="flex items-center space-x-2 mt-1">
+                    <input
+                      type="url"
+                      value={websiteInput}
+                      onChange={(e) => setWebsiteInput(e.target.value)}
+                      placeholder="https://example.com"
+                      className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      disabled={websiteUpdateLoading}
+                    />
+                    <button
+                      onClick={handleSaveWebsite}
+                      disabled={websiteUpdateLoading}
+                      className="text-green-600 hover:text-green-700 disabled:opacity-50"
+                      title="Save"
+                    >
+                      <CheckIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleCancelWebsiteEdit}
+                      disabled={websiteUpdateLoading}
+                      className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                      title="Cancel"
+                    >
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center mt-1">
+                    {workflow.clients.website ? (
+                      <>
+                        <GlobeAltIcon className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <a
+                          href={workflow.clients.website.startsWith('http') 
+                            ? workflow.clients.website 
+                            : `https://${workflow.clients.website}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary-600 hover:text-primary-700 text-sm truncate"
+                        >
+                          {workflow.clients.website}
+                        </a>
+                      </>
+                    ) : (
+                      <span className="text-gray-400 text-sm">No website set</span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

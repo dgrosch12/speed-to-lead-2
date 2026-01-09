@@ -10,9 +10,14 @@ import {
   ClipboardDocumentIcon,
   ArrowTopRightOnSquareIcon as ExternalLinkIcon,
   TrashIcon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  CogIcon,
+  CheckCircleIcon,
+  PauseIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import AgencyModal from '@/app/components/AgencyModal'
+import ClientSettingsModal from '@/app/components/ClientSettingsModal'
 import type { Client, Agency } from '@/lib/supabase'
 
 interface ClientWithWorkflow extends Client {
@@ -33,6 +38,8 @@ export default function DashboardPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [deletingClientId, setDeletingClientId] = useState<string | null>(null)
   const [showAgencyModal, setShowAgencyModal] = useState(false)
+  const [showAgencySettingsModal, setShowAgencySettingsModal] = useState(false)
+  const [agencyBeingConfigured, setAgencyBeingConfigured] = useState<Agency | null>(null)
 
   const copyToClipboard = async (text: string, id: string) => {
     try {
@@ -40,6 +47,21 @@ export default function DashboardPage() {
       setCopiedId(id)
       setTimeout(() => setCopiedId(null), 1500)
     } catch {}
+  }
+
+  const handleOpenAgencySettings = (agency: Agency) => {
+    console.log('Opening agency settings for:', agency.name)
+    console.log('Agency object:', agency)
+    setAgencyBeingConfigured(agency)
+    setShowAgencySettingsModal(true)
+    console.log('Modal state set to true')
+  }
+
+  const handleAgencyUpdated = (updatedAgency: Agency) => {
+    setAgencies(prev => prev.map(agency => 
+      agency.id === updatedAgency.id ? updatedAgency : agency
+    ))
+    fetchAgencies() // Refresh agencies
   }
 
   useEffect(() => {
@@ -124,158 +146,105 @@ export default function DashboardPage() {
 
   const fetchClients = async () => {
     try {
-      setLoading(true)
-      setError('')
-      
-      // Clear existing clients state immediately
-      setClients([])
-      
-      console.log('🔄 Fetching ALL clients from Supabase...')
-      
-      // Simple fetch with cache busting - no overengineering
-      const response = await fetch(`/api/clients?t=${Date.now()}`, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache'
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch clients')
-      }
-      
+      const response = await fetch('/api/workflows')
       const data = await response.json()
-      const clients = data.clients || []
-      
-      console.log(`📋 Found ${clients.length} clients in Supabase:`)
-      clients.forEach((client: any, index: number) => {
-        console.log(`  ${index + 1}. ${client.name || client.id}`)
-      })
-      
-      // Fetch workflows to enrich client data  
-      const workflowResponse = await fetch(`/api/workflows?t=${Date.now()}`, {
-        cache: 'no-store'
-      }).catch(() => ({ ok: false, json: () => ({ workflows: [] }) }))
-      
-      let workflows: any[] = []
-      if (workflowResponse.ok) {
-        const workflowData = await workflowResponse.json()
-        workflows = workflowData.workflows || []
+
+      if (response.ok) {
+        const clientsData = data.workflows.map((workflow: any) => ({
+          ...workflow.clients,
+          workflow_id: workflow.id,
+          n8n_url: workflow.n8n_url,
+          lead_form_webhook: workflow.lead_form_webhook,
+          workflow_status: workflow.status
+        }))
+
+        setClients(clientsData)
+      } else {
+        setError(data.error || 'Failed to fetch clients')
       }
-      
-      // Add workflow info to clients
-      const clientsWithWorkflows = clients.map((client: any) => {
-        const workflow = workflows.find((w: any) => w.client_id === client.id)
-        if (workflow) {
-          return {
-            ...client,
-            workflow_id: workflow.id,
-            workflow_status: workflow.status,
-            n8n_url: workflow.n8n_url,
-            lead_form_webhook: workflow.lead_form_webhook,
-            ivr_webhook: workflow.ivr_webhook
-          }
-        }
-        return client
-      })
-      
-      // Set the clients state - this is the ONLY source of what gets displayed
-      setClients(clientsWithWorkflows)
-      console.log('✅ Dashboard updated with current Supabase data')
-      
     } catch (error) {
-      console.error('❌ Error fetching clients:', error)
+      console.error('Error fetching clients:', error)
       setError('Failed to load clients')
-      setClients([])
     } finally {
       setLoading(false)
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
-
-  const handleDeleteClient = async (clientId: string, clientName: string) => {
-    // Confirm deletion first
-    if (!confirm(`Are you sure you want to delete "${clientName}"? This will remove the client and all associated workflows from Supabase.`)) {
+  const handleDeleteClient = async (clientId: string) => {
+    if (!confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
       return
     }
 
     setDeletingClientId(clientId)
-    setError('')
-
     try {
-      // Delete from Supabase
-      const response = await fetch(`/api/clients/${clientId}?t=${new Date().getTime()}`, {
-        method: 'DELETE',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
+      const response = await fetch(`/api/clients/${clientId}`, {
+        method: 'DELETE'
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        // If client not found, refresh the list anyway to remove it from UI
-        if (response.status === 404 || data.error?.includes('not found') || data.error?.includes('Not found')) {
-          console.warn(`Client "${clientName}" (${clientId}) not found in Supabase - refreshing list to remove from UI`)
-          await fetchClients()
-          setError(`"${clientName}" was not found in Supabase and has been removed from the dashboard.`)
-          setTimeout(() => setError(''), 5000)
-          return
-        }
-        throw new Error(data.error || 'Failed to delete client')
+      if (response.ok) {
+        setClients(prev => prev.filter(client => client.id !== clientId))
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Failed to delete client')
       }
-
-      console.log(`✅ Successfully deleted client "${clientName}" (${clientId})`)
-      
-      // Brief delay to ensure database transaction is fully committed
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // Refresh clients list after successful deletion to ensure UI matches Supabase
-      await fetchClients()
     } catch (error) {
       console.error('Error deleting client:', error)
-      setError(error instanceof Error ? error.message : 'Failed to delete client')
-      // Brief delay and refresh list anyway in case the client was already deleted
-      await new Promise(resolve => setTimeout(resolve, 100))
-      await fetchClients()
+      alert('Failed to delete client')
     } finally {
       setDeletingClientId(null)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-        <p className="text-gray-600 mt-2">Loading clients...</p>
-      </div>
-    )
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'active':
+        return <CheckCircleIcon className="w-4 h-4 text-green-500" />
+      case 'paused':
+        return <PauseIcon className="w-4 h-4 text-yellow-500" />
+      case 'error':
+        return <ExclamationTriangleIcon className="w-4 h-4 text-red-500" />
+      default:
+        return <CheckCircleIcon className="w-4 h-4 text-gray-400" />
+    }
   }
 
-  const q = searchQuery.trim().toLowerCase()
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'Active'
+      case 'paused':
+        return 'Paused'
+      case 'error':
+        return 'Error'
+      default:
+        return 'Unknown'
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
+  // Filter clients by selected agency and search query
+  const q = searchQuery.trim().toLowerCase();
   
   // Filter by active agency if one is selected
   const agencyFilteredClients = activeAgencyId
     ? clients.filter(c => {
         const clientAgencyId = c.agency_id ? String(c.agency_id) : null
-        const activeId = String(activeAgencyId)
-        return clientAgencyId === activeId
+        const agencyId = String(activeAgencyId)
+        return clientAgencyId === agencyId
       })
-    : clients
+    : clients;
   
   // Filter by search query
   const filteredClients = q
     ? agencyFilteredClients.filter((c) => ((c.name || c.id) as string).toLowerCase().includes(q))
-    : agencyFilteredClients
+    : agencyFilteredClients;
 
   // Group clients by agency for tab counts
   const clientsByAgency = agencies.reduce((acc, agency) => {
@@ -286,288 +255,257 @@ export default function DashboardPage() {
     })
     acc[agency.id] = agencyClients.length
     return acc
-  }, {} as Record<string, number>)
+  }, {} as Record<string, number>);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-1">
-            Manage your Speed to Lead clients
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <div className="relative w-64">
-            <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search clients..."
-              className="input pl-9"
-            />
-          </div>
+    <div className="h-screen flex">
+      {/* Left Sidebar - Agency Tabs */}
+      <div className="w-80 border-r border-gray-200 flex flex-col bg-gray-50">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 bg-white">
+          <h1 className="text-xl font-bold text-gray-900 mb-4">Agencies</h1>
           <button
             onClick={() => setShowAgencyModal(true)}
-            className="btn btn-secondary flex items-center"
+            className="w-full btn btn-primary btn-sm flex items-center justify-center"
           >
             <BuildingOfficeIcon className="w-4 h-4 mr-2" />
             New Agency
           </button>
-          <Link href="/create" className="btn btn-primary flex items-center">
-            <PlusIcon className="w-4 h-4 mr-2" />
-            New Client
-          </Link>
+        </div>
+
+        {/* Agency List */}
+        <div className="flex-1 overflow-y-auto">
+          {agencies.map((agency) => (
+            <div
+              key={agency.id}
+              className={`w-full border-b border-gray-200 transition-colors ${
+                activeAgencyId === agency.id 
+                  ? 'bg-primary-50 border-primary-200 text-primary-900' 
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              <div className="flex items-center justify-between p-4">
+                <div 
+                  className="flex-1 cursor-pointer" 
+                  onClick={() => setActiveAgencyId(agency.id)}
+                >
+                  <h3 className="font-medium">{agency.name}</h3>
+                  <p className="text-sm text-gray-500">
+                    {clientsByAgency[agency.id] || 0} clients
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleOpenAgencySettings(agency)
+                    }}
+                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Agency Settings"
+                  >
+                    <CogIcon className="w-4 h-4" />
+                  </button>
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    activeAgencyId === agency.id 
+                      ? 'bg-primary-100 text-primary-800' 
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {clientsByAgency[agency.id] || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Agency Tabs */}
-      {agencies.length > 0 && (
-        <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-            {agencies.map((agency) => {
-              const clientCount = clientsByAgency[agency.id] || 0
-              const isActive = activeAgencyId === agency.id
-              return (
-                <button
-                  key={agency.id}
-                  onClick={() => setActiveAgencyId(agency.id)}
-                  className={`
-                    whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm
-                    ${
-                      isActive
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  {agency.name}
-                  {clientCount > 0 && (
-                    <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${
-                      isActive
-                        ? 'bg-primary-100 text-primary-600'
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {clientCount}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </nav>
-        </div>
-      )}
+      {/* Main Content - Client Cards */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="border-b border-gray-200 bg-white px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                {agencies.find(a => a.id === activeAgencyId)?.name || 'Dashboard'}
+              </h1>
+              <p className="text-gray-600 mt-1">
+                {filteredClients.length} clients
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Link href="/create" className="btn btn-primary flex items-center">
+                <PlusIcon className="w-4 h-4 mr-2" />
+                New Client
+              </Link>
+            </div>
+          </div>
 
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800">{error}</p>
+          {/* Search Bar */}
+          <div className="mt-4">
+            <div className="relative">
+              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search clients..."
+                className="w-full max-w-md pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
         </div>
-      )}
 
-      {filteredClients.length === 0 ? (
-        <div className="text-center py-12 card">
-          <PlusIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {q ? 'No clients match your search' : 'No clients yet'}
-          </h3>
-          <p className="text-gray-600 mb-6">
-            {q ? 'Try a different search term' : 'Create your first Speed to Lead client to get started'}
-          </p>
-          {!q && (
-            <Link href="/create" className="btn btn-primary">
-              Create Client
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredClients.map((client) => {
-            const cardContent = (
-              <>
-                <div className="flex items-start justify-between mb-4">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteClient(client.id, client.name || client.id)
-                    }}
-                    disabled={deletingClientId === client.id}
-                    className="p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Delete client"
-                  >
-                    <TrashIcon className="w-4 h-4" />
-                  </button>
-                  <span className="text-xs text-gray-500">
-                    {formatDate(client.created_at)}
-                  </span>
-                </div>
-
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  {client.name || client.id}
-                </h3>
-                
-                <div className="space-y-2 mb-4 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-700">Status</span>
-                    {client.workflow_status ? (
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        client.workflow_status === 'active' 
-                          ? 'bg-success-50 text-success-600' 
-                          : client.workflow_status === 'paused'
-                          ? 'bg-warning-50 text-warning-600'
-                          : 'bg-gray-50 text-gray-600'
-                      }`}>
-                        {client.workflow_status === 'active' ? 'Active' : client.workflow_status === 'paused' ? 'Paused' : client.workflow_status}
-                      </span>
-                    ) : (
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        client.status === 'Active' 
-                          ? 'bg-success-50 text-success-600' 
-                          : 'bg-gray-50 text-gray-600'
-                      }`}>
-                        {client.status || 'Active'}
-                      </span>
-                    )}
-                  </div>
-                  
-                  {client.phone_number && (
-                    <div className="flex items-start">
-                      <PhoneIcon className="w-4 h-4 text-gray-400 mr-2 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-gray-700">Phone</p>
-                        <p className="text-gray-600">
-                          {client.area_code && client.phone_number 
-                            ? `${client.area_code} ${client.phone_number}`
-                            : client.phone_number || 'Not set'}
-                        </p>
-                      </div>
+        {/* Client Cards Grid */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading clients...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12">
+              <ExclamationTriangleIcon className="w-12 h-12 text-red-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">{error}</h3>
+              <button 
+                onClick={() => window.location.reload()} 
+                className="btn btn-primary"
+              >
+                Try Again
+              </button>
+            </div>
+          ) : filteredClients.length === 0 ? (
+            <div className="text-center py-12">
+              <BuildingOfficeIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No clients found</h3>
+              <p className="text-gray-600 mb-6">
+                {searchQuery 
+                  ? "No clients match your search criteria."
+                  : activeAgencyId 
+                    ? "This agency doesn't have any clients yet."
+                    : "Get started by creating your first client."
+                }
+              </p>
+              <Link href="/create" className="btn btn-primary">
+                Create Client
+              </Link>
+            </div>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {filteredClients.map((client) => (
+                <div key={client.id} className="card hover:shadow-lg transition-shadow">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        {client.business_name || client.name || 'Unknown Business'}
+                      </h3>
+                      {client.owner_name && (
+                        <p className="text-gray-600 text-sm">{client.owner_name}</p>
+                      )}
                     </div>
-                  )}
-                </div>
-
-                {/* Lead form webhook with copy - shown above action buttons */}
-                {client.lead_form_webhook && (
-                  <div className="bg-gray-50 rounded-lg p-3 mb-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs font-medium text-gray-500">Lead Form Webhook</p>
+                    <div className="flex items-center space-x-2 ml-4">
                       <button
-                        onClick={() => copyToClipboard(client.lead_form_webhook!, client.id as string)}
-                        className="btn btn-secondary text-xs flex items-center"
+                        onClick={() => handleDeleteClient(client.id)}
+                        disabled={deletingClientId === client.id}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        title="Delete Client"
                       >
-                        <ClipboardDocumentIcon className="w-4 h-4 mr-1" />
-                        {copiedId === client.id ? 'Copied!' : 'Copy'}
+                        {deletingClientId === client.id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                        ) : (
+                          <TrashIcon className="w-4 h-4" />
+                        )}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-700 font-mono break-all">
-                      {client.lead_form_webhook}
-                    </p>
                   </div>
-                )}
 
-                <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
-                  {/* View Details button (internal) */}
-                  {client.workflow_id ? (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        router.push(`/workflow/${client.workflow_id}`)
-                      }}
-                      className="flex-1 btn btn-secondary text-center"
-                    >
-                      View Details
-                    </button>
-                  ) : (
-                    <button
-                      disabled
-                      className="flex-1 btn btn-secondary text-center opacity-50 cursor-not-allowed"
-                      title="No workflow data available"
-                    >
-                      No Workflow
-                    </button>
-                  )}
-                  {/* Open in n8n (external) */}
-                  {client.n8n_url ? (
-                    <a
-                      href={client.n8n_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 btn btn-primary text-center flex items-center justify-center"
-                    >
-                      <ExternalLinkIcon className="w-4 h-4 mr-1" />
-                      Open in n8n
-                    </a>
-                  ) : (
-                    <button
-                      disabled
-                      className="flex-1 btn btn-secondary text-center opacity-50 cursor-not-allowed"
-                      title="No workflow found for this client"
-                    >
-                      No Workflow
-                    </button>
-                  )}
+                  <div className="space-y-2 text-sm">
+                    {client.business_phone && (
+                      <div className="flex items-center">
+                        <PhoneIcon className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <span className="text-gray-600">{client.business_phone}</span>
+                      </div>
+                    )}
+                    {client.twilio_number && (
+                      <div className="flex items-center">
+                        <PhoneIcon className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <span className="text-gray-600">Twilio: {client.twilio_number}</span>
+                      </div>
+                    )}
+                    {client.workflow_status && (
+                      <div className="flex items-center">
+                        {getStatusIcon(client.workflow_status)}
+                        <span className="ml-2 text-gray-600">
+                          {getStatusText(client.workflow_status)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex flex-col space-y-3">
+                      <span className="text-xs text-gray-500">
+                        Created {formatDate(client.created_at)}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {client.lead_form_webhook && (
+                          <button
+                            onClick={() => copyToClipboard(client.lead_form_webhook!, `webhook-${client.id}`)}
+                            className="btn btn-secondary btn-xs flex items-center"
+                            title="Copy webhook URL"
+                          >
+                            <ClipboardDocumentIcon className="w-3 h-3 mr-1" />
+                            {copiedId === `webhook-${client.id}` ? 'Copied!' : 'Webhook'}
+                          </button>
+                        )}
+                        {client.workflow_id ? (
+                          <Link
+                            href={`/workflow/${client.workflow_id}`}
+                            className="btn btn-primary btn-xs"
+                          >
+                            View Details
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-gray-400">No workflow</span>
+                        )}
+                        {client.n8n_url && (
+                          <a
+                            href={client.n8n_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-secondary btn-xs flex items-center"
+                          >
+                            <ExternalLinkIcon className="w-3 h-3 mr-1" />
+                            n8n
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </>
-            )
-
-            // Use a stable key that combines id and name to ensure React properly tracks the card
-            const cardKey = `${client.id}-${client.name || ''}-${client.created_at || ''}`
-            
-            // If client has a workflow, make the entire card clickable
-            if (client.workflow_id) {
-              return (
-                <div
-                  key={cardKey}
-                  data-client-id={client.id}
-                  onClick={() => router.push(`/workflow/${client.workflow_id}`)}
-                  className="card hover:shadow-md transition-shadow cursor-pointer"
-                >
-                  {cardContent}
-                </div>
-              )
-            }
-
-            // Otherwise, render as a regular card
-            return (
-              <div 
-                key={cardKey} 
-                data-client-id={client.id}
-                className="card hover:shadow-md transition-shadow"
-              >
-                {cardContent}
-              </div>
-            )
-          })}
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Summary Stats */}
-      {clients.length > 0 && (
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-gray-900">
-              {clients.length}
-            </p>
-            <p className="text-sm text-gray-600">Total Clients</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-primary-600">
-              {clients.filter(c => c.status === 'Active').length}
-            </p>
-            <p className="text-sm text-gray-600">Active Clients</p>
-          </div>
-          <div className="card text-center">
-            <p className="text-2xl font-bold text-success-600">
-              {clients.reduce((sum, c) => sum + (c.workflows || 0), 0)}
-            </p>
-            <p className="text-sm text-gray-600">Total Workflows</p>
-          </div>
-        </div>
-      )}
-
+      {/* Modals */}
       <AgencyModal
         isOpen={showAgencyModal}
         onClose={() => setShowAgencyModal(false)}
         onAgencyCreated={handleAgencyCreated}
+      />
+
+      <ClientSettingsModal
+        isOpen={showAgencySettingsModal}
+        onClose={() => {
+          console.log('Closing agency settings modal')
+          setShowAgencySettingsModal(false)
+        }}
+        client={null}
+        agency={agencyBeingConfigured}
+        agencies={agencies}
+        onClientUpdated={handleAgencyUpdated}
       />
     </div>
   )

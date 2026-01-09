@@ -34,6 +34,7 @@ export interface Client {
   twilio_number?: string
   area_code?: string
   phone_number?: string
+  website?: string
   workflows?: number
   calls_7d?: number
   success_7d?: number

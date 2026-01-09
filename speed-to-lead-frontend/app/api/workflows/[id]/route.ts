@@ -30,7 +30,8 @@ export async function GET(
             business_name,
             owner_name,
             business_phone,
-            twilio_number
+            twilio_number,
+            website
           )
         `)
         .eq('id', id)
@@ -73,14 +74,14 @@ export async function GET(
       // Try to find client by id, name, or business_name
       let { data: clientData } = await supabase
         .from('clients')
-        .select('id, name, business_name, owner_name, business_phone, twilio_number')
+        .select('id, name, business_name, owner_name, business_phone, twilio_number, website')
         .eq('id', clientName)
         .single()
 
       if (!clientData) {
         const { data: clientByName } = await supabase
           .from('clients')
-          .select('id, name, business_name, owner_name, business_phone, twilio_number')
+          .select('id, name, business_name, owner_name, business_phone, twilio_number, website')
           .eq('name', clientName)
           .single()
         clientData = clientByName || null
@@ -89,7 +90,7 @@ export async function GET(
       if (!clientData) {
         const { data: clientByBusinessName } = await supabase
           .from('clients')
-          .select('id, name, business_name, owner_name, business_phone, twilio_number')
+          .select('id, name, business_name, owner_name, business_phone, twilio_number, website')
           .eq('business_name', clientName)
           .single()
         clientData = clientByBusinessName || null
@@ -107,6 +108,7 @@ export async function GET(
         owner_name: null,
         business_phone: null,
         twilio_number: null,
+        website: null,
       }
     }
 
@@ -164,7 +166,8 @@ export async function PUT(
           business_name,
           owner_name,
           business_phone,
-          twilio_number
+          twilio_number,
+          website
         )
       `)
       .single()

@@ -12,6 +12,7 @@ export default function CreateWorkflowPage() {
     owner_name: '',
     business_phone: '',
     twilio_number: '',
+    website: '',
     agency_id: ''
   })
   const [loading, setLoading] = useState(false)
@@ -231,6 +232,11 @@ export default function CreateWorkflowPage() {
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({ ...prev, [name]: value }))
+  }
+
   const handlePhoneBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     const formatted = formatPhoneNumber(value)
@@ -301,7 +307,7 @@ export default function CreateWorkflowPage() {
                 id="agency_id"
                 name="agency_id"
                 value={formData.agency_id}
-                onChange={handleInputChange}
+                onChange={handleSelectChange}
                 required
                 className="input flex-1"
                 disabled={loadingAgencies}
@@ -387,6 +393,21 @@ export default function CreateWorkflowPage() {
               required
               className="input"
               placeholder="e.g., (256) 406-4689 or +12564064689"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="website" className="label">
+              Website
+            </label>
+            <input
+              type="url"
+              id="website"
+              name="website"
+              value={formData.website}
+              onChange={handleInputChange}
+              className="input"
+              placeholder="e.g., https://www.business.com"
             />
           </div>
 
