@@ -10,7 +10,12 @@
       "mcp__n8n-mcp__n8n_get_workflow",
       "mcp__n8n-mcp__tools_documentation",
       "Bash(npm install)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(claude doctor:*)",
+      "Bash(npm view:*)",
+      "Bash(npm install:*)",
+      "Bash(sudo npm install -g @anthropic-ai/claude-code@latest)",
+      "Bash(FORCE_COLOR=0 CI=true claude doctor)"
     ],
     "deny": [],
     "ask": []

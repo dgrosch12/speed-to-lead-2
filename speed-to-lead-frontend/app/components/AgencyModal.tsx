@@ -91,13 +91,20 @@ export default function AgencyModal({ isOpen, onClose, onAgencyCreated }: Agency
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-semibold text-gray-900">Add New Agency</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+      <div className="bg-dark-800 rounded-2xl shadow-glow border border-dark-700 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+        <div className="flex items-center justify-between p-6 border-b border-dark-700 sticky top-0 bg-dark-800/95 backdrop-blur-lg z-10">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-lg bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
+              <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-100">Add New Agency</h2>
+          </div>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-100 transition-colors p-2 hover:bg-dark-700 rounded-lg"
             disabled={loading}
           >
             <XMarkIcon className="h-6 w-6" />
@@ -106,8 +113,15 @@ export default function AgencyModal({ isOpen, onClose, onAgencyCreated }: Agency
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-800 text-sm">{error}</p>
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center mr-3">
+                  <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-red-300 text-sm font-medium">{error}</p>
+              </div>
             </div>
           )}
 
@@ -197,21 +211,33 @@ export default function AgencyModal({ isOpen, onClose, onAgencyCreated }: Agency
             />
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
+          <div className="flex justify-end space-x-3 pt-6 border-t border-dark-700">
             <button
               type="button"
               onClick={handleClose}
-              className="btn btn-secondary"
+              className="btn btn-secondary px-6"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="btn btn-primary px-6 flex items-center"
               disabled={loading}
             >
-              {loading ? 'Creating...' : 'Create Agency'}
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-dark-900 border-t-transparent mr-2"></div>
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Create Agency
+                </>
+              )}
             </button>
           </div>
         </form>

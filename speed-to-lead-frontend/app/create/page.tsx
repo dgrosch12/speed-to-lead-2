@@ -246,49 +246,77 @@ export default function CreateWorkflowPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">
-          Create New Speed to Lead Workflow
+    <div className="max-w-3xl mx-auto px-4 py-12">
+      <div className="mb-10">
+        <h1 className="text-5xl font-bold text-transparent bg-gradient-to-r from-gray-100 via-primary-300 to-gray-100 bg-clip-text mb-4">
+          Create New Workflow
         </h1>
-        <p className="text-gray-600">
+        <p className="text-gray-400 text-lg">
           Enter your client's information to generate a complete Speed to Lead automation workflow.
         </p>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-red-800">{error}</p>
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
+          <div className="flex items-start">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center mr-3">
+              <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-red-300 font-medium">{error}</p>
+          </div>
         </div>
       )}
 
       {existingWorkflow && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="font-semibold text-blue-900 mb-2">
-            Workflow Found in n8n
-          </h3>
-          <p className="text-blue-800 mb-3">
-            A workflow named <strong>"{existingWorkflow.name}"</strong> already exists in n8n.
-          </p>
-          <div className="mb-4 text-sm text-blue-700">
-            <p><strong>Workflow ID:</strong> {existingWorkflow.id}</p>
-            <p><strong>Status:</strong> {existingWorkflow.active ? 'Active' : 'Paused'}</p>
+        <div className="mb-6 p-6 bg-primary-500/10 border border-primary-500/30 rounded-xl backdrop-blur-sm">
+          <div className="flex items-start mb-4">
+            <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary-500/20 flex items-center justify-center mr-4">
+              <svg className="w-6 h-6 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-primary-300 mb-2">
+                Workflow Found in n8n
+              </h3>
+              <p className="text-gray-300 mb-3">
+                A workflow named <strong className="text-primary-300">"{existingWorkflow.name}"</strong> already exists in n8n.
+              </p>
+            </div>
           </div>
-          <p className="text-blue-800 mb-4">
+          <div className="mb-4 p-4 bg-dark-800/50 rounded-lg border border-dark-700">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <span className="text-gray-500 block mb-1">Workflow ID</span>
+                <span className="text-gray-300 font-mono">{existingWorkflow.id}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 block mb-1">Status</span>
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                  existingWorkflow.active ? 'bg-success-500/10 text-success-400 border border-success-500/30' : 'bg-accent-500/10 text-accent-400 border border-accent-500/30'
+                }`}>
+                  {existingWorkflow.active ? 'Active' : 'Paused'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-gray-300 mb-5">
             Would you like to link this existing workflow to the client instead of creating a new one?
           </p>
           <div className="flex space-x-3">
             <button
               onClick={handleLinkExisting}
               disabled={loading}
-              className="btn btn-primary"
+              className="btn btn-primary flex-1"
             >
               {loading ? 'Linking...' : 'Yes, Link Existing Workflow'}
             </button>
             <button
               onClick={handleCreateNew}
               disabled={loading}
-              className="btn btn-secondary"
+              className="btn btn-secondary flex-1"
             >
               No, Create New Workflow
             </button>
@@ -297,12 +325,15 @@ export default function CreateWorkflowPage() {
       )}
 
       <div className="card">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-7">
           <div>
-            <label htmlFor="agency_id" className="label">
+            <label htmlFor="agency_id" className="label flex items-center">
+              <svg className="w-4 h-4 mr-2 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
               Marketing Agency *
             </label>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <select
                 id="agency_id"
                 name="agency_id"
@@ -331,7 +362,10 @@ export default function CreateWorkflowPage() {
           </div>
 
           <div>
-            <label htmlFor="business_name" className="label">
+            <label htmlFor="business_name" className="label flex items-center">
+              <svg className="w-4 h-4 mr-2 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
               Business Name *
             </label>
             <input
@@ -347,7 +381,10 @@ export default function CreateWorkflowPage() {
           </div>
 
           <div>
-            <label htmlFor="owner_name" className="label">
+            <label htmlFor="owner_name" className="label flex items-center">
+              <svg className="w-4 h-4 mr-2 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
               Owner Name *
             </label>
             <input
@@ -362,43 +399,54 @@ export default function CreateWorkflowPage() {
             />
           </div>
 
-          <div>
-            <label htmlFor="business_phone" className="label">
-              Business Phone *
-            </label>
-            <input
-              type="tel"
-              id="business_phone"
-              name="business_phone"
-              value={formData.business_phone}
-              onChange={handleInputChange}
-              onBlur={handlePhoneBlur}
-              required
-              className="input"
-              placeholder="e.g., (256) 406-4689 or +12564064689"
-            />
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <label htmlFor="business_phone" className="label flex items-center">
+                <svg className="w-4 h-4 mr-2 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                Business Phone *
+              </label>
+              <input
+                type="tel"
+                id="business_phone"
+                name="business_phone"
+                value={formData.business_phone}
+                onChange={handleInputChange}
+                onBlur={handlePhoneBlur}
+                required
+                className="input"
+                placeholder="+1 (256) 406-4689"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="twilio_number" className="label flex items-center">
+                <svg className="w-4 h-4 mr-2 text-accent-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Twilio Number *
+              </label>
+              <input
+                type="tel"
+                id="twilio_number"
+                name="twilio_number"
+                value={formData.twilio_number}
+                onChange={handleInputChange}
+                onBlur={handlePhoneBlur}
+                required
+                className="input"
+                placeholder="+1 (256) 406-4689"
+              />
+            </div>
           </div>
 
           <div>
-            <label htmlFor="twilio_number" className="label">
-              Twilio Number *
-            </label>
-            <input
-              type="tel"
-              id="twilio_number"
-              name="twilio_number"
-              value={formData.twilio_number}
-              onChange={handleInputChange}
-              onBlur={handlePhoneBlur}
-              required
-              className="input"
-              placeholder="e.g., (256) 406-4689 or +12564064689"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="website" className="label">
-              Website
+            <label htmlFor="website" className="label flex items-center">
+              <svg className="w-4 h-4 mr-2 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+              </svg>
+              Website <span className="text-gray-500 text-xs ml-1">(Optional)</span>
             </label>
             <input
               type="url"
@@ -407,31 +455,36 @@ export default function CreateWorkflowPage() {
               value={formData.website}
               onChange={handleInputChange}
               className="input"
-              placeholder="e.g., https://www.business.com"
+              placeholder="https://www.business.com"
             />
           </div>
 
-          <div className="flex justify-end space-x-4 pt-6">
+          <div className="flex justify-end space-x-4 pt-8 border-t border-dark-700">
             <button
               type="button"
               onClick={() => router.back()}
-              className="btn btn-secondary"
+              className="btn btn-secondary px-8"
               disabled={loading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="btn btn-primary flex items-center"
+              className="btn btn-primary flex items-center px-8"
               disabled={loading}
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-dark-900 border-t-transparent mr-2"></div>
                   Creating...
                 </>
               ) : (
-                'Create Workflow'
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Create Workflow
+                </>
               )}
             </button>
           </div>

@@ -100,46 +100,53 @@ export default function ClientSettingsModal({
   if (!client && !agency) return null
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-full p-4">
-        <div className="fixed inset-0 bg-black bg-opacity-25" onClick={onClose}></div>
-        
-        <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full">
-          <div className="flex items-center justify-between p-6 border-b border-gray-200">
-            <div className="flex items-center">
-              <CogIcon className="w-6 h-6 text-gray-400 mr-3" />
-              <h2 className="text-xl font-semibold text-gray-900">
-                {agency ? 'Agency Settings' : 'Client Settings'}
-              </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+      <div className="bg-dark-800 rounded-2xl shadow-glow border border-dark-700 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto animate-slide-up">
+        <div className="flex items-center justify-between p-6 border-b border-dark-700 sticky top-0 bg-dark-800/95 backdrop-blur-lg z-10">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-lg bg-primary-500/10 border border-primary-500/30 flex items-center justify-center">
+              <CogIcon className="w-5 h-5 text-primary-400" />
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <XMarkIcon className="w-6 h-6" />
-            </button>
+            <h2 className="text-2xl font-bold text-gray-100">
+              {agency ? 'Agency Settings' : 'Client Settings'}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-100 transition-colors p-2 hover:bg-dark-700 rounded-lg"
+            disabled={loading}
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-100 mb-1">
+              {agency ? `Agency: ${agency.name}` : `Client: ${client?.business_name}`}
+            </h3>
+            <p className="text-sm text-gray-400">
+              {agency
+                ? `Configure settings for ${agency.name} agency`
+                : 'Configure agency settings for this client'
+              }
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-medium text-gray-900 mb-3">
-                {agency ? `Agency: ${agency.name}` : `Client: ${client?.business_name}`}
-              </h3>
-              <p className="text-sm text-gray-500 mb-6">
-                {agency 
-                  ? `Configure settings for ${agency.name} agency`
-                  : 'Configure agency settings for this client'
-                }
-              </p>
-            </div>
-
-            {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-800">{error}</p>
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center mr-3">
+                  <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-red-300 text-sm font-medium">{error}</p>
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
                 <label htmlFor="agency_name" className="label">
                   Agency Name *
@@ -151,86 +158,107 @@ export default function ClientSettingsModal({
                   onChange={(e) => handleInputChange('name', e.target.value)}
                   required
                   className="input"
-                  placeholder="e.g., Contractor Kingdom"
+                  placeholder="e.g., More Floors Marketing"
+                  disabled={loading}
+                  autoFocus
                 />
               </div>
 
               <div>
                 <label htmlFor="n8n_url" className="label">
-                  n8n Instance URL
+                  n8n Instance URL *
                 </label>
                 <input
                   type="url"
                   id="n8n_url"
                   value={agencyData.n8n_instance_url}
                   onChange={(e) => handleInputChange('n8n_instance_url', e.target.value)}
+                  required
                   className="input"
                   placeholder="e.g., https://your-instance.app.n8n.cloud"
+                  disabled={loading}
                 />
               </div>
 
               <div>
                 <label htmlFor="n8n_api_key" className="label">
-                  n8n API Key
+                  n8n API Key *
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   id="n8n_api_key"
                   value={agencyData.n8n_api_key}
                   onChange={(e) => handleInputChange('n8n_api_key', e.target.value)}
-                  className="input"
+                  required
+                  className="input font-mono"
                   placeholder="Enter n8n API key"
+                  disabled={loading}
                 />
               </div>
 
               <div>
                 <label htmlFor="openai_api_key" className="label">
-                  OpenAI API Key
+                  OpenAI API Key *
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   id="openai_api_key"
                   value={agencyData.openai_api_key}
                   onChange={(e) => handleInputChange('openai_api_key', e.target.value)}
-                  className="input"
-                  placeholder="Enter OpenAI API key"
+                  required
+                  className="input font-mono"
+                  placeholder="sk-..."
+                  disabled={loading}
                 />
               </div>
 
               <div>
                 <label htmlFor="twilio_api_key" className="label">
-                  Twilio API Key
+                  Twilio API Key *
                 </label>
                 <input
-                  type="text"
+                  type="password"
                   id="twilio_api_key"
                   value={agencyData.twilio_api_key}
                   onChange={(e) => handleInputChange('twilio_api_key', e.target.value)}
-                  className="input"
+                  required
+                  className="input font-mono"
                   placeholder="Enter Twilio API key"
+                  disabled={loading}
                 />
               </div>
             </div>
 
-            <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={onClose}
-                className="btn btn-secondary"
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={loading}
-              >
-                {loading ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div className="flex justify-end space-x-3 pt-6 border-t border-dark-700">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn btn-secondary px-6"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary px-6 flex items-center"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-dark-900 border-t-transparent mr-2"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Save Settings
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
